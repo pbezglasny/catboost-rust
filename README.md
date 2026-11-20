@@ -139,14 +139,12 @@ The buffer is owned by the `Model` and freed automatically when it is dropped.
 
 ### CatBoost Version
 
-You can specify which version of CatBoost to use by setting the `CATBOOST_VERSION` environment variable:
+The default CatBoost version is `1.2.10`. To build with an older version, set `CATBOOST_VERSION`:
 
 ```bash
 export CATBOOST_VERSION=1.2.8
 cargo build
 ```
-
-The default version is `1.2.8`.
 
 ### GPU Support
 
