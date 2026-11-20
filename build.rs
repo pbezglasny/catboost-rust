@@ -6,7 +6,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 fn get_catboost_version() -> String {
-    env::var("CATBOOST_VERSION").unwrap_or_else(|_| "1.2.8".to_string())
+    env::var("CATBOOST_VERSION").unwrap_or_else(|_| "1.2.10".to_string())
 }
 
 fn get_platform_info() -> (String, String) {
@@ -252,6 +252,8 @@ fn download_compiled_library(out_dir: &Path) -> Result<(), Box<dyn std::error::E
 }
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=CATBOOST_VERSION");
+    println!("cargo:rerun-if-changed=wrapper.h");
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let cb_model_interface_root = out_dir.join("libs/model_interface");
 
