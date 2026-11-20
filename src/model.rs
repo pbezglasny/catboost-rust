@@ -115,6 +115,54 @@ impl Model {
         Ok(())
     }
 
+    /// Predict one row for a numeric-only model. Requires native CatBoost 1.2 or later.
+    ///
+    /// `features` must contain exactly [`Self::get_float_features_count`] values and
+    /// `output` must have length [`Self::get_dimensions_count`]. Each successful
+    /// call, including the first after loading, uses no Rust heap allocations.
+    /// The native CatBoost library may allocate internally.
+    #[cfg(all(catboost_text_count, catboost_embeddings))]
+    pub fn predict_single_float_into(
+        &self,
+        features: &[f32],
+        output: &mut [f64],
+    ) -> CatBoostResult<()> {
+        if self.get_cat_features_count() != 0
+            || self.get_text_features_count() != 0
+            || self.get_embedding_features_count() != 0
+        {
+            return Err(CatBoostError {
+                description: "prediction requires a numeric-only model".to_owned(),
+            });
+        }
+        let width = self.get_float_features_count();
+        if features.len() != width {
+            return Err(CatBoostError {
+                description: format!("expected {width} float features, got {}", features.len()),
+            });
+        }
+        let dimensions = self.get_dimensions_count();
+        if output.len() != dimensions {
+            return Err(CatBoostError {
+                description: format!("expected {dimensions} output values, got {}", output.len()),
+            });
+        }
+
+        let mut row = features.as_ptr();
+        // SAFETY: the row pointer and both slices stay live for this synchronous call.
+        // The model accepts this row width and the output has space for every dimension.
+        CatBoostError::check_return_value(unsafe {
+            sys::CalcModelPredictionFlat(
+                self.handle,
+                1,
+                &mut row,
+                features.len(),
+                output.as_mut_ptr(),
+                output.len(),
+            )
+        })
+    }
+
     /// Calculate raw model predictions
     pub fn predict<
         TObjectFloatFeatures: AsRef<[f32]>,
@@ -565,7 +613,7 @@ mod tests {
 
     unsafe fn make_c_buffer<T: Copy>(data: &[T]) -> *mut T {
         unsafe {
-            let ptr = libc::malloc(std::mem::size_of::<T>() * data.len()) as *mut T;
+            let ptr = libc::malloc(std::mem::size_of_val(data)) as *mut T;
             assert!(!ptr.is_null(), "malloc failed");
             for (i, val) in data.iter().enumerate() {
                 ptr.add(i).write(*val);
@@ -622,7 +670,7 @@ mod tests {
 
     #[test]
     fn test_buffer_f64() {
-        let data = [1.5f64, 2.7, 3.14, 0.0, -1.0];
+        let data = [1.5f64, 2.7, 3.25, 0.0, -1.0];
         let ptr = unsafe { make_c_buffer(&data) };
         let result = unsafe { Model::from_c_allocated_buffer(ptr, data.len()) };
         assert_eq!(result, data.to_vec());
